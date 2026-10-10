@@ -197,3 +197,4 @@ if (wechatViewer) {
     image.src = 'https://img.shields.io/endpoint?url=' + encodeURIComponent(base + 'gs_data_shieldsio.json') + '&style=flat&label=Citations&color=315eea';
   } catch (_) { /* Keep the last verified value if Scholar/CDN is unavailable. */ }
 })();
+

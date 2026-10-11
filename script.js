@@ -198,3 +198,19 @@ if (wechatViewer) {
   } catch (_) { /* Keep the last verified value if Scholar/CDN is unavailable. */ }
 })();
 
+
+// Busuanzi aggregates page views for the hosted domain. Local previews do not count.
+(() => {
+  const counter = document.querySelector('.site-views');
+  if (!counter) return;
+  const status = counter.querySelector('.views-status');
+  if (['localhost', '127.0.0.1'].includes(location.hostname) || location.protocol === 'file:') {
+    status.textContent = ' · Local preview';
+    return;
+  }
+  const script = document.createElement('script');
+  script.src = 'https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js';
+  script.async = true;
+  script.onerror = () => { status.textContent = ' · Temporarily unavailable'; };
+  document.head.append(script);
+})();

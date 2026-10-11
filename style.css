@@ -256,3 +256,6 @@ body,[data-theme="dark"] body{background:var(--paper)}
  .project .paper-links{font-size:11px;gap:12px}
  .project-figure:after{width:20px;height:20px;line-height:20px;font-size:12px;right:3px;bottom:3px}
 }
+
+footer{align-items:center;gap:12px;flex-wrap:wrap}.site-views{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}.site-views #busuanzi_value_site_pv{color:var(--accent);font-weight:600}.views-status{font-size:10px}
+@media(max-width:720px){footer .site-views{order:3;flex-basis:100%;text-align:center}}

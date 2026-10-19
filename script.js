@@ -162,42 +162,9 @@ if (wechatViewer) {
   });
 }
 
-// Remote snapshots are produced by Actions, never by the visitor's browser.
-(async function updateCitationBadge() {
-  const badge = document.querySelector('.citation-link');
-  const total = document.getElementById('citation-total');
-  const status = document.getElementById('citation-updated');
-  if (!badge || !total || !status) return;
-  const base = 'https://cdn.jsdelivr.net/gh/JSLiam94/JSLiam94.github.io@google-scholar-stats/';
-  const validate = data => data.scholar_id === '-YuCzI0AAAAJ' && Number.isSafeInteger(data.citedby) && data.citedby >= 0 && Number.isFinite(Date.parse(data.updated));
-  function apply(data) {
-    total.textContent = String(data.citedby);
-    const date = new Date(data.updated).toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' }).replaceAll('-', '.');
-    status.textContent = `${data.source === 'User confirmed' ? 'Confirmed' : 'Updated'} · ${date}`;
-    badge.title = `${data.citedby} total citations · ${status.textContent}`;
-  }
-  try {
-    const local = await fetch('data/scholar.json').then(r => r.json());
-    if (validate(local)) apply(local);
-    const saved = JSON.parse(localStorage.getItem('shuo-scholar') || 'null');
-    if (saved && validate(saved) && Date.parse(saved.updated) >= Date.parse(local.updated)) apply(saved);
-  } catch (_) { /* The built-in confirmed value remains available. */ }
-  try {
-    if (location.hostname === '127.0.0.1' || location.hostname === 'localhost' || location.protocol === 'file:') return;
-    const response = await fetch(base + 'gs_data.json', { signal: AbortSignal.timeout(6000) });
-    if (!response.ok) return;
-    const data = await response.json();
-    if (!validate(data) || Date.parse(data.updated) < Date.parse('2026-10-10')) return;
-    apply(data);
-    try { localStorage.setItem('shuo-scholar', JSON.stringify(data)); } catch (_) {}
-    const image = new Image();
-    image.alt = `Citations ${data.citedby}`;
-    image.height = 20;
-    image.onload = () => { badge.replaceChildren(image); badge.classList.add('remote-citation-badge'); };
-    image.src = 'https://img.shields.io/endpoint?url=' + encodeURIComponent(base + 'gs_data_shieldsio.json') + '&style=flat&label=Citations&color=315eea';
-  } catch (_) { /* Keep the last verified value if Scholar/CDN is unavailable. */ }
-})();
-
+// Citation totals are rendered from the manually maintained data/scholar.json at build time.
+// Discard cached values from the retired automatic updater.
+try { localStorage.removeItem('shuo-scholar'); } catch (_) {}
 
 // Busuanzi aggregates page views for the hosted domain. Local previews do not count.
 (() => {

@@ -258,4 +258,5 @@ body,[data-theme="dark"] body{background:var(--paper)}
 }
 
 footer{align-items:center;gap:12px;flex-wrap:wrap}.site-views{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}.site-views #busuanzi_value_site_pv{color:var(--accent);font-weight:600}.views-status{font-size:10px}
+.views-retry{border:0;padding:2px 0;background:none;color:var(--accent);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer}.views-retry:hover{color:var(--ink)}.views-retry:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:2px}
 @media(max-width:720px){footer .site-views{order:3;flex-basis:100%;text-align:center}}

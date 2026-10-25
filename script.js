@@ -166,68 +166,86 @@ if (wechatViewer) {
 // Discard cached values from the retired automatic updater.
 try { localStorage.removeItem('shuo-scholar'); } catch (_) {}
 
-// Busuanzi aggregates page views for the hosted domain. Keep the last confirmed
-// total when the service is slow; local previews never contact the counter.
+// GoatCounter records new views; the verified historical baseline is rendered
+// into each footer at build time. Refreshing the number never records a new view.
 (() => {
   const counter = document.querySelector('.site-views');
   if (!counter || counter.dataset.initialized) return;
   counter.dataset.initialized = 'true';
-  const value = counter.querySelector('#busuanzi_value_site_pv');
+  const value = counter.querySelector('#site-views-count');
   const status = counter.querySelector('.views-status');
   if (!value || !status) return;
   const hostname = location.hostname;
   const preview = !['http:', 'https:'].includes(location.protocol)
     || hostname === 'localhost' || hostname.endsWith('.localhost')
-    || /^127\./.test(hostname) || ['::1', '[::1]'].includes(hostname);
+    || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hostname)
+    || ['::1', '[::1]', '0.0.0.0'].includes(hostname);
   if (preview) {
     value.textContent = 'Local preview';
+    status.textContent = '';
     counter.dataset.state = 'preview';
     counter.title = 'Visits are counted on the published website only.';
     return;
   }
 
-  const storageKey = `shuo-site-views:${hostname}`;
-  const description = 'Total page views across this site, including repeat visits.';
+  const endpoint = 'https://jsliam94.goatcounter.com';
+  const history = Number(counter.dataset.historyTotal);
+  if (!Number.isSafeInteger(history) || history < 0) return;
+  // A separate cache prevents adding the baseline to an old Busuanzi total.
+  const storageKey = `shuo-site-views:goatcounter:${hostname}:history-${history}`;
+  const description = `Includes ${history} historical views confirmed on 26 October 2026, plus new views recorded by GoatCounter. Public counts may be cached for up to four hours.`;
   const number = input => {
-    if (typeof input !== 'number' && !(typeof input === 'string' && /^\d+$/.test(input))) return null;
+    if (typeof input === 'string') {
+      // GoatCounter formats thousands according to the account's locale.
+      if (!/^(?:\d+|\d{1,3}(?:[, .\u00a0\u202f]\d{3})+)$/.test(input)) return null;
+      input = input.replace(/[, .\u00a0\u202f]/g, '');
+    } else if (typeof input !== 'number') return null;
     const result = Number(input);
-    return Number.isSafeInteger(result) && result >= 0 ? result : null;
+    return Number.isSafeInteger(result) && result >= 0 && Number.isSafeInteger(result + history) ? result : null;
   };
   let lastKnown = null;
   let pending = false;
+  let trackerRequested = false;
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey));
-    if (saved && number(saved.total) !== null && Number.isFinite(saved.updated) && saved.updated > 0) {
-      lastKnown = { total: number(saved.total), updated: saved.updated };
+    if (saved && number(saved.newViews) !== null && Number.isFinite(saved.updated) && saved.updated > 0) {
+      lastKnown = { newViews: number(saved.newViews), updated: saved.updated };
     }
-  } catch (_) { /* A blocked or damaged cache must not prevent a live request. */ }
+  } catch (_) { /* Storage failures must not prevent a live request. */ }
 
-  function showLastKnown() {
-    value.textContent = lastKnown.total.toLocaleString('en-US');
-    counter.title = `${description} Last confirmed: ${new Date(lastKnown.updated).toLocaleString()}.`;
+  function showKnown() {
+    value.textContent = lastKnown ? (history + lastKnown.newViews).toLocaleString('en-US') : `${history.toLocaleString('en-US')}+`;
+    counter.title = description + (lastKnown ? ` Last retrieved: ${new Date(lastKnown.updated).toLocaleString()}.` : ' The new count has not yet been retrieved.');
   }
 
-  function unavailable(offline = false) {
+  function unavailable(offline = false, permission = false) {
     counter.dataset.state = offline ? 'offline' : 'unavailable';
     counter.setAttribute('aria-busy', 'false');
-    if (lastKnown) {
-      showLastKnown();
-      status.textContent = ' · Last known';
-    } else {
-      value.textContent = offline ? 'Offline' : 'Unavailable';
-      status.textContent = '';
-      counter.title = 'The visit counter is temporarily unavailable.';
-    }
+    showKnown();
+    status.textContent = lastKnown ? ' · Last known' : ' · Historical baseline';
+    if (permission) status.append(' · Enable public counter');
     const retry = document.createElement('button');
     retry.type = 'button';
     retry.className = 'views-retry';
     retry.textContent = 'Retry';
-    retry.setAttribute('aria-label', 'Retry loading total views');
+    retry.setAttribute('aria-label', 'Refresh total views without recording another visit');
     retry.addEventListener('click', refresh);
     status.append(' · ', retry);
   }
 
-  function refresh() {
+  function startTracking() {
+    if (trackerRequested) return;
+    trackerRequested = true;
+    const script = document.createElement('script');
+    script.src = 'https://gc.zgo.at/count.js';
+    script.async = true;
+    script.dataset.goatcounter = `${endpoint}/count`;
+    // Keep preview query strings out of the stats and disable click events.
+    script.dataset.goatcounterSettings = JSON.stringify({ path: location.pathname || '/', no_events: true });
+    document.head.append(script);
+  }
+
+  async function refresh() {
     if (pending) return;
     if (navigator.onLine === false) {
       unavailable(true);
@@ -236,50 +254,38 @@ try { localStorage.removeItem('shuo-scholar'); } catch (_) {}
     pending = true;
     counter.dataset.state = 'loading';
     counter.setAttribute('aria-busy', 'true');
-    status.textContent = lastKnown ? ' · Updating…' : '';
-    if (lastKnown) showLastKnown();
-    else value.textContent = 'Loading…';
-
-    // Use the same endpoint and referrer policy as the provider's official
-    // library, with one request instead of loading another remote script first.
-    const callback = `ShuoViews_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    const script = document.createElement('script');
-    script.src = `https://busuanzi.ibruce.info/busuanzi?jsonpCallback=${callback}`;
-    script.referrerPolicy = 'no-referrer-when-downgrade';
-    script.async = true;
-    let finished = false;
-    const timer = setTimeout(() => finish(null), 10000);
-
-    function finish(total) {
-      if (finished) return;
-      finished = true;
-      pending = false;
-      clearTimeout(timer);
-      script.remove();
-      if (total === null) {
-        // A late JSONP reply must not replace the result of a newer attempt.
-        window[callback] = () => {};
-        setTimeout(() => { delete window[callback]; }, 60000);
-        unavailable(navigator.onLine === false);
+    showKnown();
+    status.textContent = ' · Updating…';
+    startTracking();
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 10000);
+    try {
+      const response = await fetch(`${endpoint}/counter/TOTAL.json`, {
+        signal: controller.signal, credentials: 'omit'
+      });
+      if (!response.ok) {
+        unavailable(false, response.status === 403);
         return;
       }
-      delete window[callback];
-      lastKnown = { total, updated: Date.now() };
+      const data = await response.json();
+      const newViews = number(data?.count);
+      if (timedOut || newViews === null) throw new Error('Invalid counter response');
+      // A delayed upstream cache must not make the displayed total go backwards.
+      lastKnown = { newViews: Math.max(newViews, lastKnown?.newViews ?? 0), updated: Date.now() };
       try { localStorage.setItem(storageKey, JSON.stringify(lastKnown)); } catch (_) {}
-      showLastKnown();
+      showKnown();
       status.textContent = '';
       counter.dataset.state = 'fresh';
       counter.setAttribute('aria-busy', 'false');
+    } catch (_) {
+      unavailable(navigator.onLine === false);
+    } finally {
+      clearTimeout(timer);
+      pending = false;
     }
-
-    window[callback] = response => finish(number(response?.site_pv));
-    script.onerror = () => finish(null);
-    script.onload = () => { if (!finished) finish(null); };
-    document.head.append(script);
   }
 
-  // Do not automatically repeat timed-out requests: the service might already
-  // have counted them. Reconnect automatically only after an offline failure.
   window.addEventListener('online', () => {
     if (counter.dataset.state === 'offline') refresh();
   });
